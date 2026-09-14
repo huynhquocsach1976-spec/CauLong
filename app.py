@@ -10,7 +10,7 @@ from main import (
     process_voice_input,
 )
 
-# Khởi tạo DB
+# Khởi tạo DB khi ứng dụng chạy
 init_db()
 
 st.set_page_config(
@@ -28,7 +28,7 @@ with st.sidebar:
     )
     user_role = st.selectbox("Vai trò", ["Thủ Quỹ / Admin", "Thành Viên"])
 
-# Tự động kết nối OpenAI Client từ Secrets hoặc Input
+# Tự động kết nối OpenAI Client
 client = get_openai_client(api_key_input)
 
 if not client:
@@ -187,20 +187,28 @@ with tabs[2]:
     st.subheader("📊 Báo Cáo Tài Chính & Quản Lý Công Nợ")
 
     conn = sqlite3.connect(DB_FILE)
-    df_sessions = pd.read_sql_query("SELECT * FROM sessions", conn)
 
-    if not df_sessions.empty():
+    try:
+        df_sessions = pd.read_sql_query("SELECT * FROM sessions", conn)
+        df_payments = pd.read_sql_query("SELECT * FROM member_payments", conn)
+    except Exception:
+        df_sessions = pd.DataFrame()
+        df_payments = pd.DataFrame()
+
+    if not df_sessions.empty:
         df_sessions["total_expense"] = (
             df_sessions["court_fee"]
             + df_sessions["shuttle_fee"]
             + df_sessions["party_fee"]
         )
-        df_payments = pd.read_sql_query("SELECT * FROM member_payments", conn)
 
-        total_income_real = df_payments[df_payments["status"] == "Đã trả"][
-            "amount_due"
-        ].sum()
-        total_expense_all = df_sessions["total_expense"].sum()
+        total_income_real = 0.0
+        if not df_payments.empty and "status" in df_payments.columns:
+            paid_records = df_payments[df_payments["status"] == "Đã trả"]
+            if not paid_records.empty:
+                total_income_real = float(paid_records["amount_due"].sum())
+
+        total_expense_all = float(df_sessions["total_expense"].sum())
         profit = total_income_real - total_expense_all
 
         kpi1, kpi2, kpi3 = st.columns(3)
@@ -218,9 +226,9 @@ with tabs[2]:
         st.divider()
 
         st.write("### 💳 Quản Lý Công Nợ Thành Viên")
-        if not df_payments.empty():
+        if not df_payments.empty and "status" in df_payments.columns:
             unpaid_df = df_payments[df_payments["status"] == "Còn nợ"]
-            if not unpaid_df.empty():
+            if not unpaid_df.empty:
                 st.warning(
                     f"Có {len(unpaid_df)} lượt chưa thanh toán. Tổng nợ: {unpaid_df['amount_due'].sum():,.0f} VNĐ"
                 )
@@ -243,7 +251,9 @@ with tabs[2]:
                     st.rerun()
             else:
                 st.info("🎉 Tất cả thành viên đã đóng phí đầy đủ!")
+        else:
+            st.info("Chưa có ghi nhận công nợ nào.")
     else:
-        st.info("Chưa có dữ liệu buổi tập.")
+        st.info("Chưa có dữ liệu buổi tập nào. Hãy sang **Tab 1** để tạo buổi tập đầu tiên!")
 
     conn.close()
