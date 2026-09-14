@@ -10,7 +10,7 @@ from main import (
     process_voice_input,
 )
 
-# Khởi tạo DB khi ứng dụng chạy
+# Khởi tạo DB
 init_db()
 
 st.set_page_config(
@@ -21,11 +21,20 @@ st.title("🏸 Hệ Thống Quản Lý CLB Cầu Lông")
 # Thanh điều hướng góc trái
 with st.sidebar:
     st.header("⚙️ Cấu Hình & Tài Khoản")
-    api_key = st.text_input("Nhập OpenAI API Key:", type="password")
+    api_key_input = st.text_input(
+        "Nhập OpenAI API Key (Tuỳ chọn):",
+        type="password",
+        help="Nếu đã cấu hình Secrets trên Streamlit Cloud, bạn có thể bỏ qua ô này.",
+    )
     user_role = st.selectbox("Vai trò", ["Thủ Quỹ / Admin", "Thành Viên"])
 
-if not api_key:
-    st.info("💡 Vui lòng nhập OpenAI API Key ở thanh bên để kích hoạt tính năng AI.")
+# Tự động kết nối OpenAI Client từ Secrets hoặc Input
+client = get_openai_client(api_key_input)
+
+if not client:
+    st.info(
+        "💡 Vui lòng nhập OpenAI API Key ở thanh bên hoặc cấu hình Secrets để dùng tính năng AI."
+    )
 
 tabs = st.tabs(
     ["📝 Nhập Buổi Tập", "🧾 Quét Bill/Giọng Nói", "📊 Báo Cáo Lời/Lỗ & Công Nợ"]
@@ -125,21 +134,25 @@ with tabs[1]:
             "Tải ảnh hóa đơn tiền sân, nước, cầu...", type=["jpg", "png", "jpeg"]
         )
 
-        if uploaded_file and api_key:
+        if uploaded_file:
             st.image(uploaded_file, caption="Ảnh hóa đơn", width=250)
             if st.button("Phân Tích Bill bằng AI"):
-                try:
-                    client = get_openai_client(api_key)
-                    with st.spinner("Đang trích xuất dữ liệu..."):
-                        img_bytes = uploaded_file.getvalue()
-                        bill_data = process_bill_image(client, img_bytes)
-
-                    st.json(bill_data)
-                    st.success(
-                        f"Nhận diện thành công: **{bill_data.get('category')}** - **{bill_data.get('amount'):,.0f} VNĐ**"
+                if not client:
+                    st.error(
+                        "Vui lòng nhập API Key hoặc cấu hình Secrets để sử dụng AI!"
                     )
-                except Exception as e:
-                    st.error(f"Lỗi khi xử lý hình ảnh: {e}")
+                else:
+                    try:
+                        with st.spinner("Đang trích xuất dữ liệu..."):
+                            img_bytes = uploaded_file.getvalue()
+                            bill_data = process_bill_image(client, img_bytes)
+
+                        st.json(bill_data)
+                        st.success(
+                            f"Nhận diện thành công: **{bill_data.get('category')}** - **{bill_data.get('amount'):,.0f} VNĐ**"
+                        )
+                    except Exception as e:
+                        st.error(f"Lỗi khi xử lý hình ảnh: {e}")
 
     with col_voice:
         st.write("### 🎙️ Nhập Bằng Giọng Nói")
@@ -147,19 +160,25 @@ with tabs[1]:
             "Tải file âm thanh ghi âm buổi tập...", type=["mp3", "wav", "m4a"]
         )
 
-        if audio_file and api_key:
+        if audio_file:
             if st.button("Phân Tích Giọng Nói"):
-                try:
-                    client = get_openai_client(api_key)
-                    with st.spinner("Đang chuyển đổi giọng nói..."):
-                        voice_data = process_voice_input(client, audio_file)
-
-                    st.markdown(
-                        f"**Văn bản nhận diện:** *\"{voice_data.get('raw_text')}\"*"
+                if not client:
+                    st.error(
+                        "Vui lòng nhập API Key hoặc cấu hình Secrets để sử dụng AI!"
                     )
-                    st.json(voice_data)
-                except Exception as e:
-                    st.error(f"Lỗi khi xử lý giọng nói: {e}")
+                else:
+                    try:
+                        with st.spinner("Đang chuyển đổi giọng nói..."):
+                            voice_data = process_voice_input(
+                                client, audio_file
+                            )
+
+                        st.markdown(
+                            f"**Văn bản nhận diện:** *\"{voice_data.get('raw_text')}\"*"
+                        )
+                        st.json(voice_data)
+                    except Exception as e:
+                        st.error(f"Lỗi khi xử lý giọng nói: {e}")
 
 # ------------------------------------------
 # TAB 3: BÁO CÁO LỜI/LỖ & CẢNH BÁO NỢ

@@ -1,9 +1,10 @@
 import base64
 import json
+import os
 import sqlite3
-from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from openai import OpenAI
+import streamlit as st
 
 DB_FILE = "badminton_club.db"
 
@@ -57,13 +58,29 @@ def init_db() -> None:
     conn.close()
 
 
-def get_openai_client(api_key: str) -> OpenAI:
-    """Khởi tạo OpenAI client."""
-    return OpenAI(api_key=api_key)
+def get_openai_client(api_key_input: Optional[str] = None) -> Optional[OpenAI]:
+    """Tự động ưu tiên lấy API Key từ Streamlit Secrets hoặc biến môi trường,
+
+    nếu không có sẽ dùng API Key người dùng nhập ở giao diện.
+    """
+    # 1. Kiểm tra Secrets trên Streamlit Cloud
+    if hasattr(st, "secrets") and "OPENAI_API_KEY" in st.secrets:
+        return OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+
+    # 2. Kiểm tra biến môi trường
+    env_key = os.getenv("OPENAI_API_KEY")
+    if env_key:
+        return OpenAI(api_key=env_key)
+
+    # 3. Dùng API Key nhập tay từ giao diện
+    if api_key_input:
+        return OpenAI(api_key=api_key_input)
+
+    return None
 
 
 def process_bill_image(client: OpenAI, image_bytes: bytes) -> Dict[str, Any]:
-    """Phân tích ảnh hóa đơn tiền sân/nước/cầu bằng GPT-4o Vision."""
+    """Phân tích ảnh hóa đơn bằng GPT-4o Vision."""
     base64_image = base64.b64encode(image_bytes).decode("utf-8")
 
     prompt = """
@@ -98,7 +115,7 @@ def process_bill_image(client: OpenAI, image_bytes: bytes) -> Dict[str, Any]:
 
 
 def process_voice_input(client: OpenAI, audio_file: Any) -> Dict[str, Any]:
-    """Chuyển giọng nói ghi âm thành dữ liệu thu chi bằng Whisper."""
+    """Chuyển giọng nói thành dữ liệu thu chi bằng Whisper."""
     transcription = client.audio.transcriptions.create(
         model="whisper-1", file=audio_file, language="vi"
     )
