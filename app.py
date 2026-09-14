@@ -14,11 +14,11 @@ from main import (
 init_db()
 
 st.set_page_config(
-    page_title="Quản Lý CLB Cầu Lông", layout="wide", page_icon="🏸"
+    page_title="Quản Lý Câu Lạc Bộ Cầu Lông", layout="wide", page_icon="🏸"
 )
-st.title("🏸 Hệ Thống Quản Lý CLB Cầu Lông")
+st.title("🏸 Hệ Thống Quản Lý Câu Lạc Bộ Cầu Lông")
 
-# Thanh điều hướng góc trái
+# Thanh điều hướng góc trái (Sidebar)
 with st.sidebar:
     st.header("⚙️ Cấu Hình & Tài Khoản")
     api_key_input = st.text_input(
@@ -26,41 +26,43 @@ with st.sidebar:
         type="password",
         help="Nếu đã cấu hình Secrets trên Streamlit Cloud, bạn có thể bỏ qua ô này.",
     )
-    user_role = st.selectbox("Vai trò", ["Thủ Quỹ / Admin", "Thành Viên"])
+    user_role = st.selectbox(
+        "Vai trò người dùng", ["Thủ Quỹ / Quản Trị Viên", "Thành Viên"]
+    )
 
 # Tự động kết nối OpenAI Client
 client = get_openai_client(api_key_input)
 
 if not client:
     st.info(
-        "💡 Vui lòng nhập OpenAI API Key ở thanh bên hoặc cấu hình Secrets để dùng tính năng AI."
+        "💡 Vui lòng nhập OpenAI API Key ở thanh bên hoặc cấu hình Secrets để sử dụng tính năng AI."
     )
 
 tabs = st.tabs(
-    ["📝 Nhập Buổi Tập", "🧾 Quét Bill/Giọng Nói", "📊 Báo Cáo Lời/Lỗ & Công Nợ"]
+    ["📝 Nhập Buổi Tập", "🧾 Quét Hóa Đơn / Giọng Nói", "📊 Báo Cáo Tài Chính & Công Nợ"]
 )
 
 # ------------------------------------------
 # TAB 1: NHẬP BUỔI TẬP & ĐIỂM DANH
 # ------------------------------------------
 with tabs[0]:
-    st.subheader("Tạo Buổi Tập Mới & Chia Phí Tự Động")
+    st.subheader("Tạo Buổi Tập Mới & Tự Động Chia Phí")
 
     col1, col2 = st.columns(2)
     with col1:
-        session_date = st.date_input("Ngày tập", datetime.now())
+        session_date = st.date_input("Ngày tập luyện", datetime.now())
         court_fee = st.number_input("Tiền thuê sân (VNĐ)", value=0, step=10000)
         shuttle_fee = st.number_input("Tiền mua cầu (VNĐ)", value=0, step=10000)
         party_fee = st.number_input(
-            "Tiền nước / ăn uống (VNĐ)", value=0, step=10000
+            "Tiền nước uống / Ăn uống (VNĐ)", value=0, step=10000
         )
 
     with col2:
         fixed_input = st.text_area(
-            "Danh sách Cố định (Mỗi người 1 dòng)", "Nam\nBắc\nHải"
+            "Danh sách Thành viên Cố định (Mỗi người 1 dòng)", "Nam\nBắc\nHải"
         )
         casual_input = st.text_area(
-            "Danh sách Vãng lai (Mỗi người 1 dòng)", "Dũng\nTuấn"
+            "Danh sách Khách Vãng lai (Mỗi người 1 dòng)", "Dũng\nTuấn"
         )
 
     total_expense = court_fee + shuttle_fee + party_fee
@@ -117,11 +119,11 @@ with tabs[0]:
             conn.commit()
             conn.close()
             st.success(
-                f"Đã lưu thành công! Phí mỗi người: {fee_per_person:,.0f} VNĐ ({total_people} người)"
+                f"Đã lưu thành công! Phí mỗi người: {fee_per_person:,.0f} VNĐ (Tổng: {total_people} người)"
             )
 
 # ------------------------------------------
-# TAB 2: QUÉT BILL & GIỌNG NÓI (AI)
+# TAB 2: QUÉT HÓA ĐƠN & GIỌNG NÓI (AI)
 # ------------------------------------------
 with tabs[1]:
     st.subheader("🤖 Phân Tích Dữ Liệu Tự Động Bằng AI")
@@ -129,14 +131,14 @@ with tabs[1]:
     col_bill, col_voice = st.columns(2)
 
     with col_bill:
-        st.write("### 📸 Quét Bill (Hình Ảnh)")
+        st.write("### 📸 Quét Hóa Đơn (Hình Ảnh)")
         uploaded_file = st.file_uploader(
             "Tải ảnh hóa đơn tiền sân, nước, cầu...", type=["jpg", "png", "jpeg"]
         )
 
         if uploaded_file:
             st.image(uploaded_file, caption="Ảnh hóa đơn", width=250)
-            if st.button("Phân Tích Bill bằng AI"):
+            if st.button("Phân Tích Hóa Đơn Bằng AI"):
                 if not client:
                     st.error(
                         "Vui lòng nhập API Key hoặc cấu hình Secrets để sử dụng AI!"
@@ -157,7 +159,7 @@ with tabs[1]:
     with col_voice:
         st.write("### 🎙️ Nhập Bằng Giọng Nói")
         audio_file = st.file_uploader(
-            "Tải file âm thanh ghi âm buổi tập...", type=["mp3", "wav", "m4a"]
+            "Tải tệp âm thanh ghi âm buổi tập...", type=["mp3", "wav", "m4a"]
         )
 
         if audio_file:
@@ -211,11 +213,13 @@ with tabs[2]:
         total_expense_all = float(df_sessions["total_expense"].sum())
         profit = total_income_real - total_expense_all
 
+        # Chỉ số KPI
         kpi1, kpi2, kpi3 = st.columns(3)
         kpi1.metric("Tổng Chi Phí", f"{total_expense_all:,.0f} VNĐ")
         kpi2.metric("Tổng Thu Thực Tế", f"{total_income_real:,.0f} VNĐ")
         kpi3.metric("Lời / Lỗ Ròng", f"{profit:,.0f} VNĐ")
 
+        # Cảnh báo thâm hụt
         if profit < 0:
             st.error(
                 f"🚨 **CẢNH BÁO LỖ:** Câu lạc bộ đang thâm hụt `{abs(profit):,.0f} VNĐ`!"
@@ -225,29 +229,46 @@ with tabs[2]:
 
         st.divider()
 
-        st.write("### 💳 Quản Lý Công Nợ Thành Viên")
+        # Quản lý Công Nợ Thành Viên
+        st.write("### 💳 Bảng Danh Sách Công Nợ Thành Viên")
         if not df_payments.empty and "status" in df_payments.columns:
-            unpaid_df = df_payments[df_payments["status"] == "Còn nợ"]
+            unpaid_df = df_payments[df_payments["status"] == "Còn nợ"].copy()
             if not unpaid_df.empty:
                 st.warning(
-                    f"Có {len(unpaid_df)} lượt chưa thanh toán. Tổng nợ: {unpaid_df['amount_due'].sum():,.0f} VNĐ"
+                    f"Có **{len(unpaid_df)}** lượt chưa thanh toán. Tổng nợ: **{unpaid_df['amount_due'].sum():,.0f} VNĐ**"
                 )
-                st.dataframe(unpaid_df, use_container_width=True)
 
+                # Đổi tên cột trong Bảng hiển thị sang tiếng Việt có dấu
+                display_df = unpaid_df.rename(
+                    columns={
+                        "id": "Mã Giao Dịch",
+                        "session_id": "Mã Buổi Tập",
+                        "member_name": "Tên Thành Viên",
+                        "member_type": "Loại Thành Viên",
+                        "amount_due": "Số Tiền Cần Đóng (VNĐ)",
+                        "amount_paid": "Số Tiền Đã Đóng (VNĐ)",
+                        "status": "Trạng Thái",
+                    }
+                )
+
+                # Hiển thị bảng danh sách công nợ
+                st.dataframe(display_df, use_container_width=True)
+
+                st.write("#### 📝 Cập Nhật Trạng Thái Thanh Toán")
                 selected_payment_id = st.selectbox(
-                    "Chọn thành viên vừa đóng tiền:",
+                    "Chọn thành viên vừa hoàn tất đóng tiền:",
                     options=unpaid_df["id"].tolist(),
-                    format_func=lambda x: f"ID: {x} - {unpaid_df[unpaid_df['id']==x]['member_name'].values[0]} ({unpaid_df[unpaid_df['id']==x]['amount_due'].values[0]:,.0f} VNĐ)",
+                    format_func=lambda x: f"Mã GD: {x} - {unpaid_df[unpaid_df['id']==x]['member_name'].values[0]} ({unpaid_df[unpaid_df['id']==x]['amount_due'].values[0]:,.0f} VNĐ)",
                 )
 
-                if st.button("Xác Nhận Đã Thu Tiền"):
+                if st.button("Xác Nhận Đã Thu Tiền", type="primary"):
                     c = conn.cursor()
                     c.execute(
                         "UPDATE member_payments SET status = 'Đã trả' WHERE id = ?",
                         (selected_payment_id,),
                     )
                     conn.commit()
-                    st.success("Cập nhật công nợ thành công!")
+                    st.success("Đã cập nhật trạng thái thanh toán thành công!")
                     st.rerun()
             else:
                 st.info("🎉 Tất cả thành viên đã đóng phí đầy đủ!")
