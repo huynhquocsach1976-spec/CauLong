@@ -10,7 +10,7 @@ from main import (
     process_voice_input,
 )
 
-# Khởi tạo DB khi ứng dụng chạy
+# Khởi tạo Cơ sở dữ liệu khi ứng dụng chạy
 init_db()
 
 st.set_page_config(
@@ -43,10 +43,10 @@ tabs = st.tabs(
 )
 
 # ------------------------------------------
-# TAB 1: NHẬP BUỔI TẬP & ĐIỂM DANH
+# TAB 1: NHẬP BUỔI TẬP & TÍNH PHÍ CHI TIẾT
 # ------------------------------------------
 with tabs[0]:
-    st.subheader("Tạo Buổi Tập Mới & Tự Động Chia Phí")
+    st.subheader("📝 Tạo Buổi Tập Mới & Quản Lý Chi Phí Thành Viên")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -56,29 +56,68 @@ with tabs[0]:
         party_fee = st.number_input(
             "Tiền nước uống / Ăn uống (VNĐ)", value=0, step=10000
         )
+        session_note = st.text_input(
+            "Ghi chú buổi tập (Ví dụ: Sân số 3 - Khách giao lưu)", ""
+        )
 
     with col2:
+        st.markdown("#### 👥 Chi Phí & Danh Sách Thành Viên")
+
+        # Cấu hình tiền cho Thành viên Cố định
+        st.caption("📌 **Thành Viên Cố Định**")
         fixed_input = st.text_area(
-            "Danh sách Thành viên Cố định (Mỗi người 1 dòng)", "Nam\nBắc\nHải"
+            "Danh sách Cố định (Mỗi người 1 dòng)",
+            "Nam\nBắc\nHải",
+            height=100,
         )
+        custom_fixed_fee = st.number_input(
+            "Số tiền mỗi TV Cố định phải đóng (VNĐ) - *Để 0 nếu muốn chia đều*",
+            value=0,
+            step=5000,
+            key="fixed_fee",
+        )
+
+        st.divider()
+
+        # Cấu hình tiền cho Khách Vãng lai
+        st.caption("🏃 **Khách Vãng Lai**")
         casual_input = st.text_area(
-            "Danh sách Khách Vãng lai (Mỗi người 1 dòng)", "Dũng\nTuấn"
+            "Danh sách Vãng lai (Mỗi người 1 dòng)",
+            "Dũng\nTuấn",
+            height=100,
+        )
+        custom_casual_fee = st.number_input(
+            "Số tiền mỗi Khách Vãng lai phải đóng (VNĐ) - *Để 0 nếu muốn chia đều*",
+            value=0,
+            step=5000,
+            key="casual_fee",
         )
 
     total_expense = court_fee + shuttle_fee + party_fee
-    st.markdown(f"**Tổng Chi Phí Buổi Tập:** `{total_expense:,.0f} VNĐ`")
+    st.markdown(f"### 💵 Tổng Chi Phí Buổi Tập: `{total_expense:,.0f} VNĐ`")
 
-    if st.button("Lưu & Tự Động Chia Phí", type="primary"):
+    if st.button("💾 Lưu Buổi Tập & Tính Phí", type="primary"):
         fixed_list = [x.strip() for x in fixed_input.split("\n") if x.strip()]
         casual_list = [
             x.strip() for x in casual_input.split("\n") if x.strip()
         ]
-        total_people = len(fixed_list) + len(casual_list)
+
+        num_fixed = len(fixed_list)
+        num_casual = len(casual_list)
+        total_people = num_fixed + num_casual
 
         if total_people == 0:
-            st.error("Chưa có thành viên nào tham gia!")
+            st.error("⚠️ Chưa có thành viên nào tham gia buổi tập!")
         else:
-            fee_per_person = total_expense / total_people
+            # Logic tính toán chi phí linh hoạt
+            if custom_fixed_fee > 0 or custom_casual_fee > 0:
+                fee_fixed = custom_fixed_fee
+                fee_casual = custom_casual_fee
+            else:
+                # Nếu không nhập riêng, hệ thống tự động chia đều tổng chi phí
+                avg_fee = total_expense / total_people
+                fee_fixed = avg_fee
+                fee_casual = avg_fee
 
             conn = sqlite3.connect(DB_FILE)
             c = conn.cursor()
@@ -93,33 +132,38 @@ with tabs[0]:
                     shuttle_fee,
                     party_fee,
                     0,
-                    "Tạo thủ công",
+                    session_note,
                 ),
             )
             session_id = c.lastrowid
 
+            # Thêm danh sách cố định vào công nợ
             for name in fixed_list:
                 c.execute(
                     """
                     INSERT INTO member_payments (session_id, member_name, member_type, amount_due, status)
                     VALUES (?, ?, 'Cố định', ?, 'Còn nợ')
                 """,
-                    (session_id, name, fee_per_person),
+                    (session_id, name, fee_fixed),
                 )
 
+            # Thêm danh sách vãng lai vào công nợ
             for name in casual_list:
                 c.execute(
                     """
                     INSERT INTO member_payments (session_id, member_name, member_type, amount_due, status)
                     VALUES (?, ?, 'Vãng lai', ?, 'Còn nợ')
                 """,
-                    (session_id, name, fee_per_person),
+                    (session_id, name, fee_casual),
                 )
 
             conn.commit()
             conn.close()
+
             st.success(
-                f"Đã lưu thành công! Phí mỗi người: {fee_per_person:,.0f} VNĐ (Tổng: {total_people} người)"
+                f"✅ Đã lưu buổi tập thành công!\n"
+                f"- **Cố định ({num_fixed} người):** {fee_fixed:,.0f} VNĐ/người\n"
+                f"- **Vãng lai ({num_casual} người):** {fee_casual:,.0f} VNĐ/người"
             )
 
 # ------------------------------------------
@@ -183,7 +227,7 @@ with tabs[1]:
                         st.error(f"Lỗi khi xử lý giọng nói: {e}")
 
 # ------------------------------------------
-# TAB 3: BÁO CÁO LỜI/LỖ & CẢNH BÁO NỢ
+# TAB 3: BÁO CÁO LỜI/LỖ & BẢNG CÔNG NỢ
 # ------------------------------------------
 with tabs[2]:
     st.subheader("📊 Báo Cáo Tài Chính & Quản Lý Công Nợ")
@@ -213,13 +257,12 @@ with tabs[2]:
         total_expense_all = float(df_sessions["total_expense"].sum())
         profit = total_income_real - total_expense_all
 
-        # Chỉ số KPI
+        # Chỉ số KPI Tài Chính
         kpi1, kpi2, kpi3 = st.columns(3)
         kpi1.metric("Tổng Chi Phí", f"{total_expense_all:,.0f} VNĐ")
         kpi2.metric("Tổng Thu Thực Tế", f"{total_income_real:,.0f} VNĐ")
         kpi3.metric("Lời / Lỗ Ròng", f"{profit:,.0f} VNĐ")
 
-        # Cảnh báo thâm hụt
         if profit < 0:
             st.error(
                 f"🚨 **CẢNH BÁO LỖ:** Câu lạc bộ đang thâm hụt `{abs(profit):,.0f} VNĐ`!"
@@ -251,14 +294,14 @@ with tabs[2]:
                     }
                 )
 
-                # Hiển thị bảng danh sách công nợ
+                # Hiển thị Bảng danh sách công nợ
                 st.dataframe(display_df, use_container_width=True)
 
                 st.write("#### 📝 Cập Nhật Trạng Thái Thanh Toán")
                 selected_payment_id = st.selectbox(
                     "Chọn thành viên vừa hoàn tất đóng tiền:",
                     options=unpaid_df["id"].tolist(),
-                    format_func=lambda x: f"Mã GD: {x} - {unpaid_df[unpaid_df['id']==x]['member_name'].values[0]} ({unpaid_df[unpaid_df['id']==x]['amount_due'].values[0]:,.0f} VNĐ)",
+                    format_func=lambda x: f"Mã GD: {x} - {unpaid_df[unpaid_df['id']==x]['member_name'].values[0]} ({unpaid_df[unpaid_df['id']==x]['member_type'].values[0]}) - {unpaid_df[unpaid_df['id']==x]['amount_due'].values[0]:,.0f} VNĐ",
                 )
 
                 if st.button("Xác Nhận Đã Thu Tiền", type="primary"):
